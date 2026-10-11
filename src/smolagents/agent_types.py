@@ -131,7 +131,7 @@ class AgentImage(AgentType, PIL.Image.Image):
             import numpy as np
 
             array = self._tensor.cpu().detach().numpy()
-            return PIL.Image.fromarray((255 - array * 255).astype(np.uint8))
+            return PIL.Image.fromarray((array * 255).astype(np.uint8))
 
     def to_string(self):
         """
@@ -153,7 +153,7 @@ class AgentImage(AgentType, PIL.Image.Image):
             array = self._tensor.cpu().detach().numpy()
 
             # There is likely simpler than load into image into save
-            img = PIL.Image.fromarray((255 - array * 255).astype(np.uint8))
+            img = PIL.Image.fromarray((array * 255).astype(np.uint8))
 
             directory = tempfile.mkdtemp()
             self._path = os.path.join(directory, str(uuid.uuid4()) + ".png")

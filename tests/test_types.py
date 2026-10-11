@@ -18,6 +18,7 @@ import unittest
 import uuid
 
 import PIL.Image
+import pytest
 
 from smolagents.agent_types import AgentAudio, AgentImage, AgentText
 
@@ -107,6 +108,31 @@ class TestAgentImage:
         # Ensure the path remains even after the object deletion
         del agent_type
         assert os.path.exists(path)
+
+    def test_tensor_pixel_values_not_inverted(self):
+        """Regression for #2656: AgentImage must not invert pixel values from tensors.
+
+        Before the fix, to_raw() and to_string() used (255 - array * 255) which
+        turned black (0.0) into white (255) and white (1.0) into black (0).
+        """
+        import numpy as np
+
+        pytest.importorskip("torch")
+        import torch
+
+        # Pure-white image (all 1.0) must come out as white pixels (255).
+        white = torch.ones(4, 4, 3, dtype=torch.float32)
+        img = AgentImage(white)
+        raw = img.to_raw()
+        pixel = np.array(raw)[0, 0]
+        assert all(v >= 250 for v in pixel), f"Expected white (≥250,≥250,≥250), got {pixel}"
+
+        # Pure-black image (all 0.0) must come out as black pixels (0).
+        black = torch.zeros(4, 4, 3, dtype=torch.float32)
+        img = AgentImage(black)
+        raw = img.to_raw()
+        pixel = np.array(raw)[0, 0]
+        assert all(v <= 5 for v in pixel), f"Expected black (≤5,≤5,≤5), got {pixel}"
 
 
 class AgentTextTests(unittest.TestCase):
