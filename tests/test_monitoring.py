@@ -233,3 +233,23 @@ class AgentLoggerLogTaskTester(unittest.TestCase):
         rendered = console.export_text()
         self.assertIn("k", rendered)
         self.assertIn("also", rendered)
+
+    def test_log_rule_forwards_level(self):
+        """Regression for #2820: log_rule() must not hardcode LogLevel.INFO.
+
+        Before the fix, log_rule() discarded its `level` argument, so rules logged
+        at ERROR were filtered out when the logger threshold was set to ERROR.
+        """
+        from smolagents.monitoring import LogLevel
+
+        # Logger threshold is ERROR; rule logged at ERROR should appear.
+        console_error = Console(record=True, width=120)
+        logger_error = AgentLogger(level=LogLevel.ERROR, console=console_error)
+        logger_error.log_rule("Step 1", level=LogLevel.ERROR)
+        self.assertIn("Step 1", console_error.export_text())
+
+        # Rule logged at DEBUG (< ERROR threshold) should NOT appear.
+        console_debug = Console(record=True, width=120)
+        logger_debug = AgentLogger(level=LogLevel.ERROR, console=console_debug)
+        logger_debug.log_rule("Step 2", level=LogLevel.DEBUG)
+        self.assertNotIn("Step 2", console_debug.export_text())
