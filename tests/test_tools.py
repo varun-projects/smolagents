@@ -606,6 +606,31 @@ class TestTool:
         test_input = "Hello, world!"
         assert recreated_tool(test_input) == test_input.upper()
 
+    def test_to_dict_does_not_corrupt_body_containing_tool_name(self):
+        """Regression for #2833: Tool.to_dict() must not replace the tool name inside the body.
+
+        A @tool named 'search' whose body contains 'search' as a substring (e.g. a URL)
+        must round-trip without rewriting those occurrences to 'forward'.
+        """
+        from smolagents import tool
+
+        @tool
+        def search(query: str) -> str:
+            """Search the knowledge base.
+
+            Args:
+                query: the search query.
+            """
+            return f"https://api.example.com/search?q={query}"
+
+        original_result = search("cats")
+        assert "/search?q=cats" in original_result
+
+        round_tripped = Tool.from_dict(search.to_dict())
+        assert round_tripped("cats") == original_result, (
+            "Round-tripped tool returned different output — tool name was corrupted in to_dict()"
+        )
+
     def test_tool_from_dict_invalid(self):
         # Missing code key
         with pytest.raises(ValueError) as e:
