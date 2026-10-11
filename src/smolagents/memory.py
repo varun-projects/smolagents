@@ -92,8 +92,15 @@ class ActionStep(MemoryStep):
     def to_messages(self, summary_mode: bool = False) -> list[ChatMessage]:
         messages = []
         if self.model_output is not None and not summary_mode:
+            if isinstance(self.model_output, list):
+                # Structured content blocks (e.g. from ToolCallingAgent): extract text parts
+                model_output_text = " ".join(
+                    b["text"] for b in self.model_output if isinstance(b, dict) and b.get("type") == "text"
+                )
+            else:
+                model_output_text = self.model_output
             messages.append(
-                ChatMessage(role=MessageRole.ASSISTANT, content=[{"type": "text", "text": self.model_output.strip()}])
+                ChatMessage(role=MessageRole.ASSISTANT, content=[{"type": "text", "text": model_output_text.strip()}])
             )
 
         if self.tool_calls is not None:
@@ -263,7 +270,15 @@ class AgentMemory:
                 if detailed and step.model_input_messages is not None:
                     logger.log_messages(step.model_input_messages, level=LogLevel.ERROR)
                 if step.model_output is not None:
-                    logger.log_markdown(title="Agent output:", content=step.model_output, level=LogLevel.ERROR)
+                    if isinstance(step.model_output, list):
+                        output_text = " ".join(
+                            b["text"]
+                            for b in step.model_output
+                            if isinstance(b, dict) and b.get("type") == "text"
+                        )
+                    else:
+                        output_text = step.model_output
+                    logger.log_markdown(title="Agent output:", content=output_text, level=LogLevel.ERROR)
             elif isinstance(step, PlanningStep):
                 logger.log_rule("Planning step", level=LogLevel.ERROR)
                 if detailed and step.model_input_messages is not None:

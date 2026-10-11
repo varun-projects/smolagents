@@ -156,6 +156,25 @@ def test_action_step_to_messages():
     assert "Observation:\nThis is a nice observation" in observation_message.content[0]["text"]
 
 
+def test_action_step_to_messages_list_model_output():
+    """Regression for #2839: to_messages() must not call .strip() on a list model_output.
+
+    ToolCallingAgent can store a list of content blocks on model_output.  Before the fix,
+    the next step raised AttributeError: 'list' object has no attribute 'strip'.
+    """
+    action_step = ActionStep(
+        model_input_messages=None,
+        tool_calls=None,
+        timing=Timing(start_time=0.0, end_time=1.0),
+        step_number=1,
+        model_output=[{"type": "text", "text": "I will echo."}],
+    )
+    messages = action_step.to_messages()
+    assert len(messages) == 1
+    assert messages[0].role == MessageRole.ASSISTANT
+    assert messages[0].content[0]["text"] == "I will echo."
+
+
 def test_action_step_to_messages_no_tool_calls_with_observations():
     action_step = ActionStep(
         model_input_messages=None,
