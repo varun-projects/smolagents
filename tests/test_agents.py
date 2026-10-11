@@ -1913,34 +1913,68 @@ class TestToolCallingAgent:
         assert "Error while parsing" in capture.get()
         assert len(agent.memory.steps) == 4
 
-    @pytest.mark.skip(
-        reason="Test is not properly implemented (GH-1255) because fake_tools should have the same name. "
-        "Additionally, it uses CodeAgent instead of ToolCallingAgent (GH-1409)"
-    )
     def test_change_tools_after_init(self):
+        """Regression for GH-1255 and GH-1409.
+
+        Both fake tools must share the same .name ("fake_tool_1") so that replacing
+        agent.tools["fake_tool_1"] actually takes effect.  The test also uses
+        ToolCallingAgent (not CodeAgent) as the class under test.
+        """
         from smolagents import tool
 
         @tool
         def fake_tool_1() -> str:
-            """Fake tool"""
+            """Fake tool - original"""
             return "1"
 
+        original_tool = fake_tool_1
+
         @tool
-        def fake_tool_2() -> str:
-            """Fake tool"""
+        def fake_tool_1() -> str:  # noqa: F811
+            """Fake tool - replacement"""
             return "2"
 
-        class FakeCodeModel(Model):
-            def generate(self, messages, stop_sequences=None):
-                return ChatMessage(role=MessageRole.ASSISTANT, content="<code>\nfinal_answer(fake_tool_1())\n</code>")
+        replacement_tool = fake_tool_1
 
-        agent = CodeAgent(tools=[fake_tool_1], model=FakeCodeModel())
+        class FakeToolCallModel(Model):
+            def __init__(self):
+                super().__init__()
+                self._call_count = 0
 
-        agent.tools["final_answer"] = CustomFinalAnswerTool()
-        agent.tools["fake_tool_1"] = fake_tool_2
+            def generate(self, messages, tools_to_call_from=None, stop_sequences=None, **kwargs):
+                self._call_count += 1
+                if self._call_count == 1:
+                    return ChatMessage(
+                        role=MessageRole.ASSISTANT,
+                        content="Calling fake_tool_1",
+                        tool_calls=[
+                            ChatMessageToolCall(
+                                id="call_0",
+                                type="function",
+                                function=ChatMessageToolCallFunction(name="fake_tool_1", arguments={}),
+                            )
+                        ],
+                    )
+                return ChatMessage(
+                    role=MessageRole.ASSISTANT,
+                    content="Done",
+                    tool_calls=[
+                        ChatMessageToolCall(
+                            id="call_1",
+                            type="function",
+                            function=ChatMessageToolCallFunction(
+                                name="final_answer", arguments={"answer": "2"}
+                            ),
+                        )
+                    ],
+                )
+
+        agent = ToolCallingAgent(tools=[original_tool], model=FakeToolCallModel())
+        agent.tools["fake_tool_1"] = replacement_tool
 
         answer = agent.run("Fake task.")
-        assert answer == "2CUSTOM"
+        # The replacement tool returns "2"; verify the agent used it (not the original "1")
+        assert answer == "2"
 
     def test_custom_final_answer_with_custom_inputs(self, test_tool):
         class CustomFinalAnswerToolWithCustomInputs(FinalAnswerTool):
@@ -2206,33 +2240,39 @@ print("Ok, calculation done!")""")
         assert messages
         assert all(m.content.endswith("</code>") for m in messages)
 
-    @pytest.mark.skip(
-        reason="Test is not properly implemented (GH-1255) because fake_tools should have the same name. "
-    )
     def test_change_tools_after_init(self):
+        """Regression for GH-1255: both fake tools must share the same .name.
+
+        This test uses CodeAgent (the class under test for this suite).
+        """
         from smolagents import tool
 
         @tool
         def fake_tool_1() -> str:
-            """Fake tool"""
+            """Fake tool - original"""
             return "1"
 
+        original_tool = fake_tool_1
+
         @tool
-        def fake_tool_2() -> str:
-            """Fake tool"""
+        def fake_tool_1() -> str:  # noqa: F811
+            """Fake tool - replacement"""
             return "2"
 
+        replacement_tool = fake_tool_1
+
         class FakeCodeModel(Model):
-            def generate(self, messages, stop_sequences=None):
-                return ChatMessage(role=MessageRole.ASSISTANT, content="<code>\nfinal_answer(fake_tool_1())\n</code>")
+            def generate(self, messages, stop_sequences=None, **kwargs):
+                return ChatMessage(
+                    role=MessageRole.ASSISTANT, content="<code>\nfinal_answer(fake_tool_1())\n</code>"
+                )
 
-        agent = CodeAgent(tools=[fake_tool_1], model=FakeCodeModel())
-
-        agent.tools["final_answer"] = CustomFinalAnswerTool()
-        agent.tools["fake_tool_1"] = fake_tool_2
+        agent = CodeAgent(tools=[original_tool], model=FakeCodeModel())
+        agent.tools["fake_tool_1"] = replacement_tool
 
         answer = agent.run("Fake task.")
-        assert answer == "2CUSTOM"
+        # The replacement tool returns "2"; verify the agent used it (not the original "1")
+        assert answer == "2"
 
     def test_local_python_executor_with_custom_functions(self):
         model = MagicMock()
