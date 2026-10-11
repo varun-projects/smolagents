@@ -93,17 +93,34 @@ class AgentImage(AgentType, PIL.Image.Image):
         elif isinstance(value, (str, pathlib.Path)):
             self._path = value
         else:
+            # Handle torch.Tensor
             try:
                 import torch
 
                 if isinstance(value, torch.Tensor):
                     self._tensor = value
-                import numpy as np
-
-                if isinstance(value, np.ndarray):
-                    self._tensor = torch.from_numpy(value)
             except ModuleNotFoundError:
                 pass
+
+            # Handle np.ndarray independently so AgentImage(array) works without torch
+            if self._tensor is None:
+                try:
+                    import numpy as np
+
+                    if isinstance(value, np.ndarray):
+                        try:
+                            import torch
+
+                            self._tensor = torch.from_numpy(value)
+                        except ModuleNotFoundError:
+                            # torch not available: store as PIL Image directly
+                            if value.dtype.kind == "f":
+                                pixel_array = (value * 255).astype(np.uint8)
+                            else:
+                                pixel_array = value
+                            self._raw = PIL.Image.fromarray(pixel_array)
+                except ModuleNotFoundError:
+                    pass
 
         if self._path is None and self._raw is None and self._tensor is None:
             raise TypeError(f"Unsupported type for {self.__class__.__name__}: {type(value)}")

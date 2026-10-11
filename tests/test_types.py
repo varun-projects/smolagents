@@ -108,6 +108,29 @@ class TestAgentImage:
         del agent_type
         assert os.path.exists(path)
 
+    def test_from_numpy_without_torch(self):
+        """Regression for #2657: AgentImage must accept a numpy array even when torch is absent.
+
+        Before the fix, the try block importing torch caught ModuleNotFoundError and
+        skipped the numpy branch entirely, raising TypeError.
+
+        This test patches out torch to simulate an environment without it.
+        """
+        import sys
+        import unittest.mock
+
+        import numpy as np
+
+        # Simulate torch not being installed by hiding it from imports
+        with unittest.mock.patch.dict(sys.modules, {"torch": None}):
+            array = np.zeros((4, 4, 3), dtype=np.uint8)
+            # Must not raise TypeError
+            img = AgentImage(array)
+            # Must be usable
+            raw = img.to_raw()
+            assert isinstance(raw, PIL.Image.Image)
+            assert raw.size == (4, 4)
+
 
 class AgentTextTests(unittest.TestCase):
     def test_from_string(self):
