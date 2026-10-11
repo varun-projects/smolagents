@@ -654,6 +654,39 @@ class TestNumpySupport:
         result = SafeSerializer.loads(serialized, allow_pickle=False)
         np.testing.assert_array_equal(result, arr)
 
+    def test_numpy_empty_axis_preserves_shape(self):
+        """Regression for #2870: SafeSerializer must preserve ndarray shape when an axis is empty.
+
+        Before the fix, shapes like (0, 768) were lost because tolist() on a zero-axis
+        array returns [] and np.array([], dtype=...) reconstructs shape (0,).
+        """
+        import json
+
+        import numpy as np
+
+        shapes = [
+            (0, 768),   # embedding matrix with zero rows
+            (2, 0, 3),  # interior empty axis
+            (0, 0),     # two empty axes
+        ]
+        for shape in shapes:
+            arr = np.empty(shape, dtype=np.float32)
+            serialized = SafeSerializer.dumps(arr, allow_pickle=False)
+            result = SafeSerializer.loads(serialized, allow_pickle=False)
+            assert result.shape == shape, f"Expected shape {shape}, got {result.shape}"
+
+        # Control: non-empty shapes still work
+        for shape in [(2, 3), (0,), ()]:
+            arr = np.zeros(shape, dtype=np.float64)
+            serialized = SafeSerializer.dumps(arr, allow_pickle=False)
+            result = SafeSerializer.loads(serialized, allow_pickle=False)
+            np.testing.assert_array_equal(result, arr)
+
+        # Backward compat: old payload without "shape" key must still load correctly
+        old_payload = "safe:" + json.dumps({"__type__": "ndarray", "data": [1.0, 2.0], "dtype": "float64"})
+        result = SafeSerializer.loads(old_payload, allow_pickle=False)
+        assert result.shape == (2,)
+
 
 class TestPILSupport:
     """Test PIL Image serialization (optional, skip if not installed)."""
